@@ -10,6 +10,7 @@ public class ReviewsDbContext(DbContextOptions<ReviewsDbContext> options) : DbCo
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<Report> Reports => Set<Report>();
     public DbSet<SuspensionAppeal> SuspensionAppeals => Set<SuspensionAppeal>();
+    public DbSet<ReportAppeal> ReportAppeals => Set<ReportAppeal>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder builder)
     {
@@ -51,6 +52,21 @@ public class ReviewsDbContext(DbContextOptions<ReviewsDbContext> options) : DbCo
         builder.Entity<SuspensionAppeal>().Property(a => a.AdminResponse).HasMaxLength(2000);
         builder.Entity<SuspensionAppeal>().HasIndex(a => a.UserId);
         builder.Entity<SuspensionAppeal>().HasIndex(a => a.Status);
+
+        // ReportAppeal — mismos indexes que SuspensionAppeal + ReportId único
+        // por reclamo pendiente (regla: un mismo reporte no puede tener 2
+        // reclamos pendientes; sí puede tener uno rechazado + otro pendiente
+        // más adelante, así que el índice único va con filtro por estado).
+        builder.Entity<ReportAppeal>().HasKey(a => a.Id);
+        builder.Entity<ReportAppeal>().Property(a => a.Id).IsRequired().ValueGeneratedOnAdd();
+        builder.Entity<ReportAppeal>().Property(a => a.ReportId).IsRequired();
+        builder.Entity<ReportAppeal>().Property(a => a.UserId).IsRequired();
+        builder.Entity<ReportAppeal>().Property(a => a.Reason).IsRequired().HasMaxLength(2000);
+        builder.Entity<ReportAppeal>().Property(a => a.Status).IsRequired().HasMaxLength(20);
+        builder.Entity<ReportAppeal>().Property(a => a.AdminResponse).HasMaxLength(2000);
+        builder.Entity<ReportAppeal>().HasIndex(a => a.ReportId);
+        builder.Entity<ReportAppeal>().HasIndex(a => a.UserId);
+        builder.Entity<ReportAppeal>().HasIndex(a => a.Status);
 
         builder.UseSnakeCaseNamingConvention();
     }

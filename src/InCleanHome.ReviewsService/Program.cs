@@ -6,11 +6,13 @@ using InCleanHome.ReviewsService.Domain.Repositories;
 using InCleanHome.ReviewsService.Domain.Services;
 using InCleanHome.ReviewsService.Infrastructure.ExternalServices.BookingService;
 using InCleanHome.ReviewsService.Infrastructure.ExternalServices.IamService;
+using InCleanHome.ReviewsService.Infrastructure.ExternalServices.ProfileService;
 using InCleanHome.ReviewsService.Infrastructure.Messaging.Consumers;
 using InCleanHome.ReviewsService.Infrastructure.Persistence;
 using InCleanHome.ReviewsService.Infrastructure.Persistence.Repositories;
 using InCleanHome.ReviewsService.Infrastructure.Pipeline;
 using MassTransit;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
@@ -70,6 +72,7 @@ try
     builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
     builder.Services.AddScoped<IReportRepository, ReportRepository>();
     builder.Services.AddScoped<ISuspensionAppealRepository, SuspensionAppealRepository>();
+    builder.Services.AddScoped<IReportAppealRepository, ReportAppealRepository>();
 
     builder.Services.AddScoped<IReviewCommandService, ReviewCommandService>();
     builder.Services.AddScoped<IReviewQueryService, ReviewQueryService>();
@@ -77,9 +80,16 @@ try
     builder.Services.AddScoped<IReportQueryService, ReportQueryService>();
     builder.Services.AddScoped<ISuspensionAppealCommandService, SuspensionAppealCommandService>();
     builder.Services.AddScoped<ISuspensionAppealQueryService, SuspensionAppealQueryService>();
+    builder.Services.AddScoped<IReportAppealCommandService, ReportAppealCommandService>();
+    builder.Services.AddScoped<IReportAppealQueryService, ReportAppealQueryService>();
 
     builder.Services.AddHttpClient<IIamServiceClient, IamServiceClient>(c => c.Timeout = TimeSpan.FromSeconds(15));
     builder.Services.AddHttpClient<IBookingServiceClient, BookingServiceClient>(c => c.Timeout = TimeSpan.FromSeconds(15));
+    builder.Services.AddHttpClient<IProfileServiceClient, ProfileServiceClient>(c => c.Timeout = TimeSpan.FromSeconds(15));
+    builder.Services.AddHttpClient<
+        InCleanHome.ReviewsService.Infrastructure.ExternalServices.CommunicationService.ICommunicationServiceClient,
+        InCleanHome.ReviewsService.Infrastructure.ExternalServices.CommunicationService.CommunicationServiceClient
+    >(c => c.Timeout = TimeSpan.FromSeconds(10));
 
     builder.Services.AddMassTransit(x =>
     {
@@ -120,7 +130,10 @@ try
 
     app.UseSerilogRequestLogging();
     app.UseCors();
-    app.MapHealthChecks("/health");
+    app.MapHealthChecks("/health", new HealthCheckOptions
+    {
+        Predicate = check => check.Name != "masstransit-bus"
+    });
     app.MapGet("/", () => Results.Ok(new
     {
         service = serviceName, status = "running",

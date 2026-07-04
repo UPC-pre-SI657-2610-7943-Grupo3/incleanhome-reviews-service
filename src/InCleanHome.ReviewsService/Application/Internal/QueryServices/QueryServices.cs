@@ -25,3 +25,10 @@ public class SuspensionAppealQueryService(ISuspensionAppealRepository repository
     public Task<SuspensionAppeal?> Handle(GetSuspensionAppealByIdQuery q) => repository.FindByIdAsync(q.Id);
     public Task<IEnumerable<SuspensionAppeal>> Handle(GetSuspensionAppealsByUserIdQuery q) => repository.FindByUserIdAsync(q.UserId);
 }
+
+public class ReportAppealQueryService(IReportAppealRepository repository) : IReportAppealQueryService
+{
+    public Task<IEnumerable<ReportAppeal>> Handle(GetAllReportAppealsQuery q) => repository.ListAsync(q.StatusFilter);
+    public Task<ReportAppeal?> Handle(GetReportAppealByIdQuery q) => repository.FindByIdAsync(q.Id);
+    public Task<IEnumerable<ReportAppeal>> Handle(GetReportAppealsByUserIdQuery q) => repository.FindByUserIdAsync(q.UserId);
+}

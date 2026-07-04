@@ -33,3 +33,10 @@ public interface ISuspensionAppealRepository : IBaseRepository<SuspensionAppeal>
     Task<IEnumerable<SuspensionAppeal>> FindByUserIdAsync(int userId);
     Task<SuspensionAppeal?> FindPendingByUserIdAsync(int userId);
 }
+
+public interface IReportAppealRepository : IBaseRepository<ReportAppeal>
+{
+    Task<IEnumerable<ReportAppeal>> ListAsync(string? statusFilter);
+    Task<IEnumerable<ReportAppeal>> FindByUserIdAsync(int userId);
+    Task<ReportAppeal?> FindPendingByReportIdAsync(int reportId);
+}

@@ -46,3 +46,18 @@ public interface ISuspensionAppealQueryService
     Task<SuspensionAppeal?> Handle(GetSuspensionAppealByIdQuery query);
     Task<IEnumerable<SuspensionAppeal>> Handle(GetSuspensionAppealsByUserIdQuery query);
 }
+
+// Report Appeals
+public interface IReportAppealCommandService
+{
+    Task<ReportAppeal> Handle(SubmitReportAppealCommand command);
+    Task<ReportAppeal?> Handle(AcceptReportAppealCommand command);
+    Task<ReportAppeal?> Handle(RejectReportAppealCommand command);
+}
+
+public interface IReportAppealQueryService
+{
+    Task<IEnumerable<ReportAppeal>> Handle(GetAllReportAppealsQuery query);
+    Task<ReportAppeal?> Handle(GetReportAppealByIdQuery query);
+    Task<IEnumerable<ReportAppeal>> Handle(GetReportAppealsByUserIdQuery query);
+}

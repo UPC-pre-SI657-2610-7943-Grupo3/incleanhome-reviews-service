@@ -3,6 +3,7 @@ using InCleanHome.ReviewsService.Domain.Model.Commands;
 using InCleanHome.ReviewsService.Domain.Repositories;
 using InCleanHome.ReviewsService.Domain.Services;
 using InCleanHome.ReviewsService.Infrastructure.ExternalServices.BookingService;
+using InCleanHome.ReviewsService.Infrastructure.ExternalServices.ProfileService;
 using InCleanHome.ReviewsService.Infrastructure.Messaging.Events;
 using MassTransit;
 
@@ -11,6 +12,7 @@ namespace InCleanHome.ReviewsService.Application.Internal.CommandServices;
 public class ReviewCommandService(
     IReviewRepository repository,
     IBookingServiceClient bookingClient,
+    IProfileServiceClient profileClient,
     IUnitOfWork unitOfWork,
     IPublishEndpoint publishEndpoint,
     IHttpContextAccessor httpContextAccessor,
@@ -31,9 +33,23 @@ public class ReviewCommandService(
         if (existing is not null)
             throw new InvalidOperationException("You already reviewed this booking.");
 
-        var review = new Review(c.BookingId, c.ClientId, booking.WorkerId, c.Rating, c.Comment);
+        // Snapshot the client's name from the booking — denormalized into the
+        // Review so the worker's profile can render it without an extra HTTP call.
+        var review = new Review(c.BookingId, c.ClientId, booking.WorkerId, c.Rating, c.Comment, booking.ClientName);
         await repository.AddAsync(review);
         await unitOfWork.CompleteAsync();
+
+        // Update the worker's running rating SYNCHRONOUSLY via HTTP.
+        // This mirrors the monolith's in-process ACL behaviour: rating updates
+        // were never queued, they happened in the same transaction context.
+        // We don't fail the review if this HTTP call fails — the RabbitMQ
+        // event below is the retry path — but we log it loudly so it's visible.
+        var registered = await profileClient.RegisterReviewAsync(review.WorkerId, review.Rating);
+        if (!registered)
+            logger.LogWarning(
+                "[ReviewCommandService] Direct HTTP rating update failed for worker {WorkerId}; " +
+                "relying on RabbitMQ ReviewSubmittedEvent fallback.",
+                review.WorkerId);
 
         await SafePublishAsync(new ReviewSubmittedEvent
         {

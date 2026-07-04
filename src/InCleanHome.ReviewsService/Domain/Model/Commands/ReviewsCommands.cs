@@ -13,3 +13,8 @@ public record DismissReportCommand(int ReportId, int AdminUserId, string? AdminN
 public record SubmitSuspensionAppealCommand(int UserId, string Reason);
 public record AcceptSuspensionAppealCommand(int AppealId, int AdminUserId, string Response);
 public record RejectSuspensionAppealCommand(int AppealId, int AdminUserId, string Response);
+
+// Report Appeals — un usuario reportado apela contra el reporte específico.
+public record SubmitReportAppealCommand(int ReportId, int UserId, string Reason);
+public record AcceptReportAppealCommand(int AppealId, int AdminUserId, string Response);
+public record RejectReportAppealCommand(int AppealId, int AdminUserId, string Response);

@@ -66,3 +66,25 @@ public class SuspensionAppealRepository(ReviewsDbContext context)
         => await Context.Set<SuspensionAppeal>()
             .FirstOrDefaultAsync(a => a.UserId == userId && a.Status == SuspensionAppeal.StatusPending);
 }
+
+public class ReportAppealRepository(ReviewsDbContext context)
+    : BaseRepository<ReportAppeal>(context), IReportAppealRepository
+{
+    public new async Task<IEnumerable<ReportAppeal>> ListAsync(string? statusFilter)
+    {
+        var q = Context.Set<ReportAppeal>().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(statusFilter))
+            q = q.Where(a => a.Status == statusFilter);
+        return await q.OrderByDescending(a => a.CreatedDate).ToListAsync();
+    }
+
+    public async Task<IEnumerable<ReportAppeal>> FindByUserIdAsync(int userId)
+        => await Context.Set<ReportAppeal>()
+            .Where(a => a.UserId == userId)
+            .OrderByDescending(a => a.CreatedDate)
+            .ToListAsync();
+
+    public async Task<ReportAppeal?> FindPendingByReportIdAsync(int reportId)
+        => await Context.Set<ReportAppeal>()
+            .FirstOrDefaultAsync(a => a.ReportId == reportId && a.Status == ReportAppeal.StatusPending);
+}

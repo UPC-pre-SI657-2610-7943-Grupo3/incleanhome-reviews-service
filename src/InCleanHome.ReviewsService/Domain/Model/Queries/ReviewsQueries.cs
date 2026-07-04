@@ -14,3 +14,7 @@ public record GetReportByIdQuery(int Id);
 public record GetAllSuspensionAppealsQuery(string? StatusFilter);
 public record GetSuspensionAppealByIdQuery(int Id);
 public record GetSuspensionAppealsByUserIdQuery(int UserId);
+
+public record GetAllReportAppealsQuery(string? StatusFilter);
+public record GetReportAppealByIdQuery(int Id);
+public record GetReportAppealsByUserIdQuery(int UserId);

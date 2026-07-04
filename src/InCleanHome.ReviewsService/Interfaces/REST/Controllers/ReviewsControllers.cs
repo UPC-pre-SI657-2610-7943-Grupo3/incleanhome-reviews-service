@@ -35,15 +35,6 @@ public class ReviewsController(
         catch (Exception e) { return BadRequest(new { error = e.Message }); }
     }
 
-    [HttpGet("booking/{bookingId:int}")]
-    [SwaggerOperation("Get Review by Booking", "Returns the review for a booking, or 404 if no review.")]
-    public async Task<IActionResult> GetByBooking(int bookingId)
-    {
-        var r = await queryService.Handle(new GetReviewByBookingIdQuery(bookingId));
-        if (r is null) return NotFound();
-        return Ok(ReviewResourceFromEntityAssembler.ToResourceFromEntity(r));
-    }
-
     [HttpGet("worker/{workerId:int}")]
     [SwaggerOperation("Get Reviews by Worker")]
     public async Task<IActionResult> GetByWorker(int workerId)
@@ -52,13 +43,6 @@ public class ReviewsController(
         return Ok(reviews.Select(ReviewResourceFromEntityAssembler.ToResourceFromEntity));
     }
 
-    [HttpGet("client/{clientId:int}")]
-    [SwaggerOperation("Get Reviews by Client")]
-    public async Task<IActionResult> GetByClient(int clientId)
-    {
-        var reviews = await queryService.Handle(new GetReviewsByClientIdQuery(clientId));
-        return Ok(reviews.Select(ReviewResourceFromEntityAssembler.ToResourceFromEntity));
-    }
 }
 
 [ApiController]
@@ -97,13 +81,27 @@ public class ReportsController(
         return Ok(reports.Select(ReportResourceFromEntityAssembler.ToResourceFromEntity));
     }
 
-    [HttpGet("user/{userId:int}")]
-    [SwaggerOperation("Get Reports by Reported User (admin)")]
-    public async Task<IActionResult> GetByReportedUser(int userId)
+    [HttpGet("me")]
+    [SwaggerOperation("Get Reports Against Me",
+        "Returns reports where the current user is the REPORTED user (so the worker/client knows they were reported).")]
+    public async Task<IActionResult> GetReportsAgainstMe()
     {
         var current = (AuthenticatedUser?)HttpContext.Items["User"];
         if (current is null) return Unauthorized();
-        if (!current.IsAdmin()) return Forbid();
+
+        var reports = await queryService.Handle(new GetReportsByReportedUserIdQuery(current.UserId));
+        return Ok(reports.Select(ReportResourceFromEntityAssembler.ToResourceFromEntity));
+    }
+
+    [HttpGet("user/{userId:int}")]
+    [SwaggerOperation("Reports Against User (internal composition)",
+        "Returns all reports where the given user is the REPORTED party. " +
+        "Used by Search Service to count confirmed reports and show the badge " +
+        "on the public worker profile. Requires authentication but NOT admin role.")]
+    public async Task<IActionResult> GetReportsAgainstUser(int userId)
+    {
+        var current = (AuthenticatedUser?)HttpContext.Items["User"];
+        if (current is null) return Unauthorized();
 
         var reports = await queryService.Handle(new GetReportsByReportedUserIdQuery(userId));
         return Ok(reports.Select(ReportResourceFromEntityAssembler.ToResourceFromEntity));
@@ -160,9 +158,11 @@ public class SuspensionAppealsController(
         catch (Exception e) { return BadRequest(new { error = e.Message }); }
     }
 
-    [HttpGet("mine")]
-    [SwaggerOperation("My Appeals")]
-    public async Task<IActionResult> Mine()
+    [HttpGet("me")]
+    [SwaggerOperation("My Appeals",
+        "Returns the current user's own appeals. The frontend expects 200 with the latest appeal data " +
+        "or an empty list — but we keep returning a list for consistency.")]
+    public async Task<IActionResult> Me()
     {
         var current = (AuthenticatedUser?)HttpContext.Items["User"];
         if (current is null) return Unauthorized();
@@ -170,8 +170,21 @@ public class SuspensionAppealsController(
         return Ok(appeals.Select(SuspensionAppealResourceFromEntityAssembler.ToResourceFromEntity));
     }
 
+    [HttpGet("pending")]
+    [SwaggerOperation("List Pending Appeals (admin)",
+        "Returns only appeals with status='pending'. Used by AdminSuspensionAppealsView.")]
+    public async Task<IActionResult> Pending()
+    {
+        var current = (AuthenticatedUser?)HttpContext.Items["User"];
+        if (current is null) return Unauthorized();
+        if (!current.IsAdmin()) return Forbid();
+
+        var appeals = await queryService.Handle(new GetAllSuspensionAppealsQuery("pending"));
+        return Ok(appeals.Select(SuspensionAppealResourceFromEntityAssembler.ToResourceFromEntity));
+    }
+
     [HttpGet]
-    [SwaggerOperation("List Appeals (admin)")]
+    [SwaggerOperation("List Appeals (admin)", "Optionally filter by ?status=pending|accepted|rejected.")]
     public async Task<IActionResult> List([FromQuery] string? status)
     {
         var current = (AuthenticatedUser?)HttpContext.Items["User"];
@@ -213,6 +226,108 @@ public class SuspensionAppealsController(
             var appeal = await commandService.Handle(new RejectSuspensionAppealCommand(id, current.UserId, body.Response));
             if (appeal is null) return NotFound();
             return Ok(SuspensionAppealResourceFromEntityAssembler.ToResourceFromEntity(appeal));
+        }
+        catch (Exception e) { return BadRequest(new { error = e.Message }); }
+    }
+}
+
+/// <summary>
+///   Report appeals — a user disputes a report filed against them.
+///   Follows the same UX as <see cref="SuspensionAppealsController"/>.
+/// </summary>
+[ApiController]
+[Route("api/v1/report-appeals")]
+[Produces(MediaTypeNames.Application.Json)]
+[SwaggerTag("Report appeals — reported users contest a report")]
+public class ReportAppealsController(
+    IReportAppealCommandService commandService,
+    IReportAppealQueryService queryService) : ControllerBase
+{
+    [HttpPost]
+    [SwaggerOperation("Submit Report Appeal",
+        "The current user submits an appeal about a specific report filed against them.")]
+    public async Task<IActionResult> Submit([FromBody] SubmitReportAppealResource body)
+    {
+        var current = (AuthenticatedUser?)HttpContext.Items["User"];
+        if (current is null) return Unauthorized();
+
+        try
+        {
+            var appeal = await commandService.Handle(
+                new SubmitReportAppealCommand(body.ReportId, current.UserId, body.Reason));
+            return Ok(ReportAppealResourceFromEntityAssembler.ToResourceFromEntity(appeal));
+        }
+        catch (Exception e) { return BadRequest(new { error = e.Message }); }
+    }
+
+    [HttpGet("me")]
+    [SwaggerOperation("My Report Appeals", "Returns the current user's own report appeals.")]
+    public async Task<IActionResult> Me()
+    {
+        var current = (AuthenticatedUser?)HttpContext.Items["User"];
+        if (current is null) return Unauthorized();
+        var appeals = await queryService.Handle(new GetReportAppealsByUserIdQuery(current.UserId));
+        return Ok(appeals.Select(ReportAppealResourceFromEntityAssembler.ToResourceFromEntity));
+    }
+
+    [HttpGet("pending")]
+    [SwaggerOperation("List Pending Report Appeals (admin)")]
+    public async Task<IActionResult> Pending()
+    {
+        var current = (AuthenticatedUser?)HttpContext.Items["User"];
+        if (current is null) return Unauthorized();
+        if (!current.IsAdmin()) return Forbid();
+
+        var appeals = await queryService.Handle(new GetAllReportAppealsQuery("pending"));
+        return Ok(appeals.Select(ReportAppealResourceFromEntityAssembler.ToResourceFromEntity));
+    }
+
+    [HttpGet]
+    [SwaggerOperation("List Report Appeals (admin)",
+        "Optionally filter by ?status=pending|accepted|rejected.")]
+    public async Task<IActionResult> List([FromQuery] string? status)
+    {
+        var current = (AuthenticatedUser?)HttpContext.Items["User"];
+        if (current is null) return Unauthorized();
+        if (!current.IsAdmin()) return Forbid();
+
+        var appeals = await queryService.Handle(new GetAllReportAppealsQuery(status));
+        return Ok(appeals.Select(ReportAppealResourceFromEntityAssembler.ToResourceFromEntity));
+    }
+
+    [HttpPatch("{id:int}/accept")]
+    [SwaggerOperation("Accept Report Appeal (admin)",
+        "Admin accepts the appeal — the underlying report is automatically dismissed.")]
+    public async Task<IActionResult> Accept(int id, [FromBody] DecideAppealResource body)
+    {
+        var current = (AuthenticatedUser?)HttpContext.Items["User"];
+        if (current is null) return Unauthorized();
+        if (!current.IsAdmin()) return Forbid();
+
+        try
+        {
+            var appeal = await commandService.Handle(
+                new AcceptReportAppealCommand(id, current.UserId, body.Response));
+            if (appeal is null) return NotFound();
+            return Ok(ReportAppealResourceFromEntityAssembler.ToResourceFromEntity(appeal));
+        }
+        catch (Exception e) { return BadRequest(new { error = e.Message }); }
+    }
+
+    [HttpPatch("{id:int}/reject")]
+    [SwaggerOperation("Reject Report Appeal (admin)")]
+    public async Task<IActionResult> Reject(int id, [FromBody] DecideAppealResource body)
+    {
+        var current = (AuthenticatedUser?)HttpContext.Items["User"];
+        if (current is null) return Unauthorized();
+        if (!current.IsAdmin()) return Forbid();
+
+        try
+        {
+            var appeal = await commandService.Handle(
+                new RejectReportAppealCommand(id, current.UserId, body.Response));
+            if (appeal is null) return NotFound();
+            return Ok(ReportAppealResourceFromEntityAssembler.ToResourceFromEntity(appeal));
         }
         catch (Exception e) { return BadRequest(new { error = e.Message }); }
     }

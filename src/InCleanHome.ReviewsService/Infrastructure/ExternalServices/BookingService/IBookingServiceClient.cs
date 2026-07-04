@@ -9,7 +9,7 @@ public interface IBookingServiceClient
     Task<BookingSummary?> GetBookingAsync(int bookingId, string bearerToken);
 }
 
-public record BookingSummary(int Id, int ClientId, int WorkerId, string Status);
+public record BookingSummary(int Id, int ClientId, int WorkerId, string ClientName, string Status);
 
 public class BookingServiceClient(
     HttpClient http,
@@ -33,7 +33,8 @@ public class BookingServiceClient(
                 json.TryGetProperty("id", out var id) ? id.GetInt32() : 0,
                 json.TryGetProperty("clientId", out var c) ? c.GetInt32() : 0,
                 json.TryGetProperty("workerId", out var w) ? w.GetInt32() : 0,
-                json.TryGetProperty("status",   out var s) ? s.GetString() ?? "" : "");
+                json.TryGetProperty("clientName", out var cn) ? cn.GetString() ?? string.Empty : string.Empty,
+                json.TryGetProperty("status",   out var s) ? s.GetString() ?? string.Empty : string.Empty);
         }
         catch (Exception ex)
         {
